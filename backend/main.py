@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
-import aiosqlite
 import uvicorn
+import json
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -8,13 +8,14 @@ from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage
 from langchain.tools import tool
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import ToolRuntime
 from pydantic import BaseModel
 
 row = 13
 col = 13
 chess = [list(0 for _ in range(row)) for _ in range(col)]
+
 
 class LLMContext(BaseModel):
     chat_id: int
@@ -28,10 +29,14 @@ def get_chess_board():
     return
         棋盘
     """
-    return chess
+    return {
+        "type": "current_chess",
+        "chess": chess
+    }
+
 
 @tool
-def set_piece(row:int, col:int,runtime:ToolRuntime[LLMContext]):
+def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
     """
     下棋
     Args:
@@ -40,37 +45,45 @@ def set_piece(row:int, col:int,runtime:ToolRuntime[LLMContext]):
     return:
         下完当前棋后的棋盘
     """
-    chess[row][col] = runtime.context.side
-    return chess
+    if chess[row][col] == 0:
+        chess[row][col] = runtime.context.side
+        return {
+            "type": "new_chess",
+            "chess": chess
+        }
+    else:
+        return {
+            "type": "error",
+            "content": "此处已有棋子!"
+        }
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     llm = init_chat_model("deepseek:deepseek-v4-flash")
-    conn = await aiosqlite.connect("conversations.db")
-    checkpoint = AsyncSqliteSaver(conn)
+    checkpoint = InMemorySaver()
     agent = create_agent(
         model=llm,
-        system_prompt="",
+        system_prompt="你正在下棋",
         checkpointer=checkpoint,
-        tools=[get_chess_board,set_piece]
+        tools=[get_chess_board, set_piece]
     )
 
     app.state.agent = agent
     app.state.checkpoint = checkpoint
-    app.state.conn = conn
     yield
 
 
-async def generate(chat_id,side):
+async def generate(chat_id, side):
     config = {
         "configurable": {
-            "thread_id": str(chat_id)
+            "thread_id": str(chat_id) + "_" + str(side)
         }
     }
     async for mode, data in app.state.agent.astream(
             {"messages": [HumanMessage(content="到你了")]},
             stream_mode=["messages", "updates"],
-            context=LLMContext(chat_id=chat_id,side=side),
+            context=LLMContext(chat_id=chat_id, side=side),
             config=config
     ):
         match mode:
@@ -86,6 +99,8 @@ async def generate(chat_id,side):
                     for message in value["messages"]:
                         if hasattr(message, "tool_calls") and message.tool_calls:
                             yield f"event:tool_calls\ndata:{message.tool_calls[0]['name']}\n\n"
+                        if message.type == "tool" and json.loads(message.content).get("type") == "new_chess":
+                            yield f"event:new_chess\ndata:{json.dumps(json.loads(message.content).get('chess'))}\n\n"
 
 
 app = FastAPI(lifespan=lifespan)
@@ -98,12 +113,18 @@ app.add_middleware(
 )
 
 
-@app.get("/chat/")
-def chat(chat_id,side):
+@app.post("/api/chat")
+def chat(req: LLMContext):
     return StreamingResponse(
-        generate(chat_id,side),
+        generate(req.chat_id, req.side),
         media_type="text/event-stream",
     )
+
+
+@app.get("/api/chess")
+def get_chess():
+    return chess
+
 
 if __name__ == '__main__':
     print("\nServer: http://127.0.0.1:8000\n")
