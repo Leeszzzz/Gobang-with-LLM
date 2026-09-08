@@ -19,7 +19,9 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+*.db
+*.db-shm
+*.db-wal
 # 虚拟环境
 .venv/
 venv/
