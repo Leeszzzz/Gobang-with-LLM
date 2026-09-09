@@ -74,8 +74,15 @@ def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
     return:
         下完当前棋后的棋盘
     """
+    global turn
+    if turn != runtime.context.side:
+        return {
+            "type": "error",
+            "content": "你已经下过棋了,现在不是你的回合,请结束请求"
+        }
     if chess[row][col] == 0:
         chess[row][col] = runtime.context.side
+        turn = 3 - turn
         end = check_chess(chess, row, col)
         return {
             "type": "end",
@@ -93,18 +100,18 @@ def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    llm = init_chat_model("deepseek:deepseek-v4-flash")
-    # llm = ChatOpenAI( # 本地模型测试
-    #     base_url="http://localhost:6657/v1",
-    #     api_key="machine",
-    #     model="ornith-1.5-9b",
-    #     temperature=0.7,
-    # )
+    # llm = init_chat_model("deepseek:deepseek-v4-flash")
+    llm = ChatOpenAI( # 本地模型测试
+        base_url="http://localhost:6657/v1",
+        api_key="machine",
+        model="ornith-1.5-9b",
+        temperature=0.7,
+    )
 
     checkpoint = InMemorySaver()
     agent = create_agent(
         model=llm,
-        system_prompt="你正在下棋",
+        system_prompt="你正在下棋,棋盘中1为黑棋，2为白棋，0为空位置",
         checkpointer=checkpoint,
         tools=[get_chess_board, set_piece]
     )
@@ -121,7 +128,7 @@ async def generate(chat_id, side):
         }
     }
     async for mode, data in app.state.agent.astream(
-            {"messages": [HumanMessage(content="到你了")]},
+            {"messages": [HumanMessage(content=f"对手棋子已已下完,或你是先手,总之到你了,你是{"黑棋" if side == 1 else "白棋"},数组里表示{str(side)},请使用工具下棋")]},
             stream_mode=["messages", "updates"],
             context=LLMContext(chat_id=chat_id, side=side),
             config=config

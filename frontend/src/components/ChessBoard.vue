@@ -78,7 +78,7 @@ function addContent(messages, type, data) {
     return
   }
 
-  if ((messages.value.length === 0 || messages.value.at(-1).type !== type) && type !== "") {
+  if (((messages.value.length === 0 || messages.value.at(-1).type !== type) && type !== "") || type === "tool_calls") {
     messages.value.push({
       type: type,
       content: ""
@@ -217,6 +217,7 @@ async function nextSide() {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: none;
 }
 
 .ReasoningMessage {
