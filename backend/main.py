@@ -8,6 +8,7 @@ from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage
 from langchain.tools import tool
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import ToolRuntime
 from pydantic import BaseModel
@@ -15,11 +16,39 @@ from pydantic import BaseModel
 row = 13
 col = 13
 chess = [list(0 for _ in range(row)) for _ in range(col)]
+turn = 1
 
 
 class LLMContext(BaseModel):
     chat_id: int
     side: int
+
+
+def check_chess(chess_board, latest_row, latest_col):
+    piece = chess_board[latest_row][latest_col]
+    directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+    rows = len(chess_board)
+    cols = len(chess_board[0])
+
+    for d_row, d_col in directions:
+        count = 1
+
+        r, c = latest_row + d_row, latest_col + d_col
+        while 0 <= r < rows and 0 <= c < cols and chess_board[r][c] == piece:
+            count += 1
+            r += d_row
+            c += d_col
+
+        r, c = latest_row - d_row, latest_col - d_col
+        while 0 <= r < rows and 0 <= c < cols and chess_board[r][c] == piece:
+            count += 1
+            r -= d_row
+            c -= d_col
+
+        if count >= 5:
+            return piece
+
+    return 0
 
 
 @tool
@@ -47,7 +76,11 @@ def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
     """
     if chess[row][col] == 0:
         chess[row][col] = runtime.context.side
+        end = check_chess(chess, row, col)
         return {
+            "type": "end",
+            "chess": chess
+        } if end else {
             "type": "new_chess",
             "chess": chess
         }
@@ -61,6 +94,13 @@ def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     llm = init_chat_model("deepseek:deepseek-v4-flash")
+    # llm = ChatOpenAI( # 本地模型测试
+    #     base_url="http://localhost:6657/v1",
+    #     api_key="machine",
+    #     model="ornith-1.5-9b",
+    #     temperature=0.7,
+    # )
+
     checkpoint = InMemorySaver()
     agent = create_agent(
         model=llm,
@@ -101,6 +141,9 @@ async def generate(chat_id, side):
                             yield f"event:tool_calls\ndata:{message.tool_calls[0]['name']}\n\n"
                         if message.type == "tool" and json.loads(message.content).get("type") == "new_chess":
                             yield f"event:new_chess\ndata:{json.dumps(json.loads(message.content).get('chess'))}\n\n"
+                        elif message.type == "tool" and json.loads(message.content).get("type") == "end":
+                            yield f"event:end\ndata:{json.dumps(json.loads(message.content).get('chess'))}\n\n"
+
 
 
 app = FastAPI(lifespan=lifespan)

@@ -46,14 +46,14 @@
 </template>
 
 <script setup>
-import {ref} from "vue";
+import {reactive, ref} from "vue";
 import {fetchEventSource} from "@microsoft/fetch-event-source";
 
-const game = {
+const game = reactive({
   started: false,
   chat_id: 1,
   side: 1
-}
+});
 
 const messages_black = ref([])
 const messages_white = ref([])
@@ -72,6 +72,10 @@ function addContent(messages, type, data) {
   if (type === "new_chess") {
     chess.value = JSON.parse(data)
     return
+  } else if (type === "end") {
+    chess.value = JSON.parse(data)
+    game.started = false
+    return
   }
 
   if ((messages.value.length === 0 || messages.value.at(-1).type !== type) && type !== "") {
@@ -86,6 +90,17 @@ function addContent(messages, type, data) {
 async function startGame() {
   game.started = true
   await nextSide()
+}
+
+function GameOver(side) {
+  switch (side) {
+    case 1:
+      alert("黑方获胜");
+      break;
+    case 2:
+      alert("白方获胜");
+      break;
+  }
 }
 
 async function nextSide() {
@@ -109,8 +124,12 @@ async function nextSide() {
           }
         },
         onclose() {
-          game.side = 3 - game.side
-          nextSide()
+          if (game.started) {
+            game.side = 3 - game.side
+            nextSide()
+          } else {
+            GameOver(game.side)
+          }
         }
       }
   )
