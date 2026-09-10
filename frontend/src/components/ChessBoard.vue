@@ -1,5 +1,6 @@
 <template>
   <div class="chess-container">
+    <!-- 左边（黑棋）AI界面 -->
     <div class="AI-chat">
       <div class="message-container">
         <div v-for="(message,i) in messages_black" :key="i">
@@ -15,6 +16,7 @@
         </div>
       </div>
     </div>
+    <!-- 中间棋盘 -->
     <div class="chess-body">
       <div class="chess-board">
         <div
@@ -27,6 +29,7 @@
       </div>
       <button class="start-btn" v-if="!game.started" @click="startGame">开始</button>
     </div>
+    <!-- 右边（白棋）AI界面 -->
     <div class="AI-chat">
       <div class="message-container">
         <div v-for="(message,i) in messages_white" :key="i">
@@ -48,19 +51,21 @@
 <script setup>
 import {reactive, ref} from "vue";
 import {fetchEventSource} from "@microsoft/fetch-event-source";
-
+// 全局游戏状态
 const game = reactive({
   started: false,
   chat_id: 1,
   side: 1
 });
-
+// 黑白棋消息
 const messages_black = ref([])
 const messages_white = ref([])
+// 棋盘
 const chess = ref([]);
+// 行高列宽
 const row = 13;
 const col = 13;
-
+// 初始化棋盘
 for (let i = 0; i < row; i++) {
   chess.value.push([]);
   for (let j = 0; j < col; j++) {
@@ -68,7 +73,9 @@ for (let i = 0; i < row; i++) {
   }
 }
 
+// 在黑/白棋消息中添加新消息
 function addContent(messages, type, data) {
+  // 更新棋盘和判断游戏是否结束
   if (type === "new_chess") {
     chess.value = JSON.parse(data)
     return
@@ -77,7 +84,7 @@ function addContent(messages, type, data) {
     game.started = false
     return
   }
-
+// 添加新消息
   if (((messages.value.length === 0 || messages.value.at(-1).type !== type) && type !== "") || type === "tool_calls") {
     messages.value.push({
       type: type,
@@ -87,11 +94,13 @@ function addContent(messages, type, data) {
   messages.value.at(-1).content += data
 }
 
+// 游戏开始
 async function startGame() {
   game.started = true
   await nextSide()
 }
 
+// 游戏结束
 function GameOver(side) {
   switch (side) {
     case 1:
@@ -103,7 +112,9 @@ function GameOver(side) {
   }
 }
 
+// 下一回合
 async function nextSide() {
+  // 微软的fetch-event-source npm包，用于实现post+传参+流式输出
   await fetchEventSource("/api/chat", {
         method: "POST",
         headers: {
@@ -113,6 +124,7 @@ async function nextSide() {
           chat_id: game.chat_id,
           side: game.side
         }),
+        // 会话进行中
         onmessage(event) {
           switch (game.side) {
             case 1:
@@ -123,6 +135,7 @@ async function nextSide() {
               break;
           }
         },
+        // 会话结束
         onclose() {
           if (game.started) {
             game.side = 3 - game.side
