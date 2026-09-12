@@ -22,10 +22,46 @@ chess = [list(0 for _ in range(row)) for _ in range(col)]
 turn = 1
 
 
+def create_agent_black(base_url, api_key, model):
+    llm = ChatOpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+    )
+    agent = create_agent(
+        model=llm,
+        system_prompt="你正在下棋,棋盘中1为黑棋，2为白棋，0为空位置",
+        checkpointer=app.state.checkpoint,
+        tools=[get_chess_board, set_piece]
+    )
+    return agent
+
+
+def create_agent_white(base_url, api_key, model):
+    llm = ChatOpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        model=model,
+    )
+    agent = create_agent(
+        model=llm,
+        system_prompt="你正在下棋,棋盘中1为黑棋，2为白棋，0为空位置",
+        checkpointer=app.state.checkpoint,
+        tools=[get_chess_board, set_piece]
+    )
+    return agent
+
+
 # 接口返回模型，也是大模型的上下文对象
 class LLMContext(BaseModel):
     chat_id: int
     side: int
+
+
+class LLMConfig(BaseModel):
+    base_url: str
+    api_key: str
+    model: str
 
 
 def check_chess(chess_board, latest_row, latest_col):
@@ -126,25 +162,7 @@ def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
 # 生命周期管理
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 配置模型
-    llm = init_chat_model("deepseek:deepseek-v4-flash")
-    # llm = ChatOpenAI(  # 本地模型测试
-    #     base_url="http://localhost:6657/v1",
-    #     api_key="machine",
-    #     model="device",
-    #     temperature=0.7,
-    # )
-    # 上下文记忆
     checkpoint = InMemorySaver()
-    # 创建带有工具及上下文记忆的智能体
-    agent = create_agent(
-        model=llm,
-        system_prompt="你正在下棋,棋盘中1为黑棋，2为白棋，0为空位置",
-        checkpointer=checkpoint,
-        tools=[get_chess_board, set_piece]
-    )
-    # 挂载到应用状态
-    app.state.agent = agent
     app.state.checkpoint = checkpoint
     yield
 
@@ -162,8 +180,9 @@ async def generate(chat_id, side):
             "thread_id": str(chat_id) + "_" + str(side)
         }
     }
+    agent = app.state.agent_black if side == 1 else app.state.agent_white
     # 混合模式输出运行智能体，并挂载运行配置和上下文记忆
-    async for mode, data in app.state.agent.astream(
+    async for mode, data in agent.astream(
             {"messages": [HumanMessage(
                 content=f"对手棋子已已下完,或你是先手,总之到你了,你是{"黑棋" if side == 1 else "白棋"},数组里表示{str(side)},请使用工具下棋")]},
             stream_mode=["messages", "updates"],
@@ -181,6 +200,7 @@ async def generate(chat_id, side):
                     # 返回AI回复内容
                     yield f"event:content\ndata: {chunk.content}\n\n"
                 # 若上面这个if判断chunk中没有内容就是模型在思考，返回思考内容
+                print(chunk)
                 reasoning_content = chunk.additional_kwargs.get("reasoning_content", "")
                 # 返回思考内容
                 if reasoning_content:
@@ -216,16 +236,44 @@ app.add_middleware(
 @app.post("/api/chat")
 def chat(req: LLMContext):
     """启动对话"""
-    return StreamingResponse(
-        generate(req.chat_id, req.side),
-        media_type="text/event-stream",
-    )
+    if hasattr(app.state, "agent_black") and hasattr(app.state, "agent_white"):
+        return StreamingResponse(
+            generate(req.chat_id, req.side),
+            media_type="text/event-stream",
+        )
+    else:
+        return {
+            "type": "error",
+            "content": "双方模型未初始化"
+        }
 
 
 @app.get("/api/chess")
 def get_chess():
     """得到当前棋盘"""
     return chess
+
+
+@app.post("/api/create_black")
+def create_black(req: LLMConfig):
+    """初始化黑棋智能体"""
+    agent = create_agent_black(req.base_url, req.api_key, req.model)
+    app.state.agent_black = agent
+    return {
+        "type": "success",
+        "content": "黑棋初始化完成"
+    }
+
+
+@app.post("/api/create_white")
+def create_white(req: LLMConfig):
+    """初始化白棋智能体"""
+    agent = create_agent_white(req.base_url, req.api_key, req.model)
+    app.state.agent_white = agent
+    return {
+        "type": "success",
+        "content": "黑棋初始化完成"
+    }
 
 
 if __name__ == '__main__':

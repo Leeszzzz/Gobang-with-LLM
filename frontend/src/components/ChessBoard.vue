@@ -2,6 +2,19 @@
   <div class="chess-container">
     <!-- 左边（黑棋）AI界面 -->
     <div class="AI-chat">
+      <div class="AI-config" v-if="showBlackConfig">
+        <div class="config"><p>base url</p><input v-model="blackConfig.base_url"></div>
+        <div class="config"><p>api key</p><input v-model="blackConfig.api_key"></div>
+        <div class="config"><p>model</p><input v-model="blackConfig.model"></div>
+        <div class="config-btn">
+          <button @click="showBlackConfig = false">取消</button>
+          <button @click="initBlack">确定</button>
+        </div>
+      </div>
+      <button v-if="!showBlackConfig"
+              class="AI-config"
+              @click="showBlackConfig = true"
+              style="font-size: 20px">黑棋设置</button>
       <div class="message-container" ref="blackChat">
         <div v-for="(message,i) in messages_black" :key="i">
           <div v-if="message.type === 'reasoning_content'" class="ReasoningMessage">
@@ -31,6 +44,19 @@
     </div>
     <!-- 右边（白棋）AI界面 -->
     <div class="AI-chat">
+      <div class="AI-config" v-if="showWhiteConfig">
+        <div class="config"><p>base url</p><input v-model="whiteConfig.base_url"></div>
+        <div class="config"><p>api key</p><input v-model="whiteConfig.api_key"></div>
+        <div class="config"><p>model</p><input v-model="whiteConfig.model"></div>
+        <div class="config-btn">
+          <button @click="showWhiteConfig = false">取消</button>
+          <button @click="initWhite">确定</button>
+        </div>
+      </div>
+      <button v-if="!showWhiteConfig"
+              class="AI-config"
+              @click="showWhiteConfig = true"
+              style="font-size: 20px">白棋设置</button>
       <div class="message-container" ref="whiteChat">
         <div v-for="(message,i) in messages_white" :key="i">
           <div v-if="message.type === 'reasoning_content'" class="ReasoningMessage">
@@ -49,14 +75,21 @@
 </template>
 
 <script setup>
-import {reactive, ref, watch, nextTick} from "vue";
+import {reactive, ref, watch, nextTick, onMounted} from "vue";
 import {fetchEventSource} from "@microsoft/fetch-event-source";
+import axios from "axios";
 // 全局游戏状态
 const game = reactive({
   started: false,
   chat_id: 1,
   side: 1
 });
+// 黑白棋设置可见
+const showBlackConfig = ref(false)
+const showWhiteConfig = ref(false)
+// 黑白棋设置
+const blackConfig = ref({})
+const whiteConfig = ref({})
 // 黑白棋消息
 const messages_black = ref([])
 const messages_white = ref([])
@@ -73,6 +106,50 @@ for (let i = 0; i < row; i++) {
   chess.value.push([]);
   for (let j = 0; j < col; j++) {
     chess.value[i].push(0);
+  }
+}
+// 初始化设置
+onMounted(() => {
+  // 本地获取保存的设置信息
+  blackConfig.value = JSON.parse(localStorage.getItem("blackConfig"));
+  whiteConfig.value = JSON.parse(localStorage.getItem("whiteConfig"));
+  if (!blackConfig.value) {
+    blackConfig.value = {
+      base_url:null,
+      api_key:null,
+      model:null
+    }
+  }
+  if (!whiteConfig.value) {
+    whiteConfig.value = {
+      base_url:null,
+      api_key:null,
+      model:null
+    }
+  }
+})
+// 发请求 创建黑棋agent
+async function initBlack() {
+  const res = await axios.post("/api/create_black",{
+    base_url:blackConfig.value.base_url,
+    api_key:blackConfig.value.api_key,
+    model:blackConfig.value.model
+  })
+  if(res.data.type === "success") {
+    localStorage.setItem("blackConfig", JSON.stringify(whiteConfig.value));
+    showBlackConfig.value = false
+  }
+}
+//  发请求 创建白棋agent
+async function initWhite() {
+  const res = await axios.post("/api/create_white",{
+    base_url:whiteConfig.value.base_url,
+    api_key:whiteConfig.value.api_key,
+    model:whiteConfig.value.model
+  })
+  if(res.data.type === "success") {
+    localStorage.setItem("whiteConfig", JSON.stringify(whiteConfig.value));
+    showWhiteConfig.value = false
   }
 }
 
@@ -100,7 +177,7 @@ function addContent(messages, type, data) {
 // 游戏开始
 async function startGame() {
   game.started = true
-  await nextSide()
+  await nextTurn()
 }
 
 // 游戏结束
@@ -116,7 +193,7 @@ function GameOver(side) {
 }
 
 // 下一回合
-async function nextSide() {
+async function nextTurn() {
   // 微软的fetch-event-source npm包，用于实现post+传参+流式输出
   await fetchEventSource("/api/chat", {
         method: "POST",
@@ -142,7 +219,7 @@ async function nextSide() {
         onclose() {
           if (game.started) {
             game.side = 3 - game.side
-            nextSide()
+            nextTurn()
           } else {
             GameOver(game.side)
           }
@@ -241,7 +318,43 @@ watch(messages_white, async () => {
   flex: 3;
   min-width: 0;
   display: flex;
+  flex-direction: column;
   background-color: rgb(198 153 78 / 0.78);
+}
+
+.AI-config {
+  display: flex;
+  flex-direction: column;
+  background-color: rgb(198 153 78 / 0.49);
+  gap: 5px;
+  padding: 20px;
+}
+
+.config {
+  height: 50px;
+  display: flex;
+  flex-direction: row;
+}
+
+.config > p {
+  flex: 1;
+}
+
+.config > input {
+  flex: 3;
+  font-size: 20px;
+}
+
+.config-btn {
+  display: flex;
+  flex-direction: row;
+}
+
+.config-btn > button {
+  flex: 1;
+  margin: 5px;
+  padding:5px;
+  font-size: 15px;
 }
 
 .message-container {
