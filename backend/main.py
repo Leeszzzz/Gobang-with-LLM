@@ -127,13 +127,13 @@ def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 配置模型
-    # llm = init_chat_model("deepseek:deepseek-v4-flash")
-    llm = ChatOpenAI(  # 本地模型测试
-        base_url="http://localhost:6657/v1",
-        api_key="machine",
-        model="ornith-1.5-9b",
-        temperature=0.7,
-    )
+    llm = init_chat_model("deepseek:deepseek-v4-flash")
+    # llm = ChatOpenAI(  # 本地模型测试
+    #     base_url="http://localhost:6657/v1",
+    #     api_key="machine",
+    #     model="device",
+    #     temperature=0.7,
+    # )
     # 上下文记忆
     checkpoint = InMemorySaver()
     # 创建带有工具及上下文记忆的智能体
@@ -179,12 +179,12 @@ async def generate(chat_id, side):
                 # 检查返回节点是否为模型，而不是工具等，不加这层判断会导致工具重复输出返回内容（虽然此项目不涉及工具返回内容）
                 if chunk.content and meta.get("langgraph_node") == "model":
                     # 返回AI回复内容
-                    yield f"event:content\ndata:{chunk.content}\n\n"
+                    yield f"event:content\ndata: {chunk.content}\n\n"
                 # 若上面这个if判断chunk中没有内容就是模型在思考，返回思考内容
                 reasoning_content = chunk.additional_kwargs.get("reasoning_content", "")
                 # 返回思考内容
                 if reasoning_content:
-                    yield f"event:reasoning_content\ndata:{reasoning_content}\n\n"
+                    yield f"event:reasoning_content\ndata: {reasoning_content}\n\n"
             # updates模式，主要返回工具数据
             case "updates":
                 # 解包元组得到键值
@@ -192,13 +192,13 @@ async def generate(chat_id, side):
                     for message in value["messages"]:
                         # 返回所调用工具名称
                         if hasattr(message, "tool_calls") and message.tool_calls:
-                            yield f"event:tool_calls\ndata:{message.tool_calls[0]['name']}\n\n"
+                            yield f"event:tool_calls\ndata: {message.tool_calls[0]['name']}\n\n"
                         # 返回游戏未结束的信息和当前棋盘
                         if message.type == "tool" and json.loads(message.content).get("type") == "new_chess":
-                            yield f"event:new_chess\ndata:{json.dumps(json.loads(message.content).get('chess'))}\n\n"
+                            yield f"event:new_chess\ndata: {json.dumps(json.loads(message.content).get('chess'))}\n\n"
                         # 返回游戏结束的信息和当前棋盘
                         elif message.type == "tool" and json.loads(message.content).get("type") == "end":
-                            yield f"event:end\ndata:{json.dumps(json.loads(message.content).get('chess'))}\n\n"
+                            yield f"event:end\ndata: {json.dumps(json.loads(message.content).get('chess'))}\n\n"
 
 
 # 创建应用

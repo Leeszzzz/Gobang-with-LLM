@@ -2,7 +2,7 @@
   <div class="chess-container">
     <!-- 左边（黑棋）AI界面 -->
     <div class="AI-chat">
-      <div class="message-container">
+      <div class="message-container" ref="blackChat">
         <div v-for="(message,i) in messages_black" :key="i">
           <div v-if="message.type === 'reasoning_content'" class="ReasoningMessage">
             {{ message.content }}
@@ -31,7 +31,7 @@
     </div>
     <!-- 右边（白棋）AI界面 -->
     <div class="AI-chat">
-      <div class="message-container">
+      <div class="message-container" ref="whiteChat">
         <div v-for="(message,i) in messages_white" :key="i">
           <div v-if="message.type === 'reasoning_content'" class="ReasoningMessage">
             {{ message.content }}
@@ -49,7 +49,7 @@
 </template>
 
 <script setup>
-import {reactive, ref} from "vue";
+import {reactive, ref, watch, nextTick} from "vue";
 import {fetchEventSource} from "@microsoft/fetch-event-source";
 // 全局游戏状态
 const game = reactive({
@@ -60,6 +60,9 @@ const game = reactive({
 // 黑白棋消息
 const messages_black = ref([])
 const messages_white = ref([])
+//黑白棋消息框
+const blackChat = ref(null)
+const whiteChat = ref(null)
 // 棋盘
 const chess = ref([]);
 // 行高列宽
@@ -148,6 +151,24 @@ async function nextSide() {
   )
 }
 
+// 滚动到底部
+function scrollToBottom(el) {
+  if (!el) return
+  el.scrollTop = el.scrollHeight
+}
+
+// 监听黑棋消息（deep 才能感知 content 的追加）
+watch(messages_black, async () => {
+  // DOM更新后滚动
+  await nextTick()
+  scrollToBottom(blackChat.value)
+}, {deep: true, flush: 'post'})
+
+watch(messages_white, async () => {
+  await nextTick()
+  scrollToBottom(whiteChat.value)
+}, {deep: true, flush: 'post'})
+
 </script>
 
 <style scoped>
@@ -230,7 +251,7 @@ async function nextSide() {
   flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: none;
+  scrollbar-width: thin;
 }
 
 .ReasoningMessage {
