@@ -14,7 +14,8 @@
       <button v-if="!showBlackConfig"
               class="AI-config"
               @click="showBlackConfig = true"
-              style="font-size: 20px">黑棋设置</button>
+              style="font-size: 20px">黑棋设置
+      </button>
       <div class="message-container" ref="blackChat">
         <div v-for="(message,i) in messages_black" :key="i">
           <div v-if="message.type === 'reasoning_content'" class="ReasoningMessage">
@@ -35,12 +36,24 @@
         <div
             v-for="(cell, k) in chess.flat(1)"
             :key="k"
-            class="chess-cell">
+            class="chess-cell"
+            @click="setPiece(Math.floor(k / col), k % col)">
           <div v-if="cell === 1" class="black-piece"/>
           <div v-if="cell === 2" class="white-piece"/>
         </div>
       </div>
-      <button class="start-btn" v-if="!game.started" @click="startGame">开始</button>
+      <div class="game-config" v-if="!game.started">
+        <div class="mode-select">
+          <p>选择模式</p>
+          <select class="game-mode" v-model="game.mode">
+            <option :value="0">双方都为大模型</option>
+            <option :value="1">执黑棋（先手）</option>
+            <option :value="2">执白棋（后手）</option>
+          </select>
+        </div>
+
+        <button class="start-btn" @click="startGame">开始</button>
+      </div>
     </div>
     <!-- 右边（白棋）AI界面 -->
     <div class="AI-chat">
@@ -56,7 +69,8 @@
       <button v-if="!showWhiteConfig"
               class="AI-config"
               @click="showWhiteConfig = true"
-              style="font-size: 20px">白棋设置</button>
+              style="font-size: 20px">白棋设置
+      </button>
       <div class="message-container" ref="whiteChat">
         <div v-for="(message,i) in messages_white" :key="i">
           <div v-if="message.type === 'reasoning_content'" class="ReasoningMessage">
@@ -82,7 +96,8 @@ import axios from "axios";
 const game = reactive({
   started: false,
   chat_id: 1,
-  side: 1
+  side: 1,
+  mode: 0 // 0 双方人机，1 我方黑棋，2 我方白棋
 });
 // 黑白棋设置可见
 const showBlackConfig = ref(false)
@@ -109,45 +124,51 @@ for (let i = 0; i < row; i++) {
   }
 }
 // 初始化设置
-onMounted(() => {
+onMounted(async () => {
   // 本地获取保存的设置信息
   blackConfig.value = JSON.parse(localStorage.getItem("blackConfig"));
   whiteConfig.value = JSON.parse(localStorage.getItem("whiteConfig"));
   if (!blackConfig.value) {
     blackConfig.value = {
-      base_url:null,
-      api_key:null,
-      model:null
+      base_url: null,
+      api_key: null,
+      model: null
     }
+  } else {
+    await initBlack()
   }
   if (!whiteConfig.value) {
     whiteConfig.value = {
-      base_url:null,
-      api_key:null,
-      model:null
+      base_url: null,
+      api_key: null,
+      model: null
     }
+  } else {
+    await initWhite()
   }
 })
+
 // 发请求 创建黑棋agent
 async function initBlack() {
-  const res = await axios.post("/api/create_black",{
-    base_url:blackConfig.value.base_url,
-    api_key:blackConfig.value.api_key,
-    model:blackConfig.value.model
+  const res = await axios.post("/api/create_black", {
+    base_url: blackConfig.value.base_url,
+    api_key: blackConfig.value.api_key,
+    model: blackConfig.value.model
   })
-  if(res.data.type === "success") {
-    localStorage.setItem("blackConfig", JSON.stringify(whiteConfig.value));
+  if (res.data.type === "success") {
+    localStorage.setItem("blackConfig", JSON.stringify(blackConfig.value));
     showBlackConfig.value = false
   }
 }
+
 //  发请求 创建白棋agent
 async function initWhite() {
-  const res = await axios.post("/api/create_white",{
-    base_url:whiteConfig.value.base_url,
-    api_key:whiteConfig.value.api_key,
-    model:whiteConfig.value.model
+  const res = await axios.post("/api/create_white", {
+    base_url: whiteConfig.value.base_url,
+    api_key: whiteConfig.value.api_key,
+    model: whiteConfig.value.model
   })
-  if(res.data.type === "success") {
+  if (res.data.type === "success") {
     localStorage.setItem("whiteConfig", JSON.stringify(whiteConfig.value));
     showWhiteConfig.value = false
   }
@@ -177,17 +198,60 @@ function addContent(messages, type, data) {
 // 游戏开始
 async function startGame() {
   game.started = true
-  await nextTurn()
+  switch (game.mode) {
+    case 0:
+      await nextTurn()
+      break;
+    case 1:
+      break;
+    case 2:
+      await nextTurn()
+      break;
+  }
 }
 
 // 游戏结束
 function GameOver(side) {
+  game.started = false
   switch (side) {
     case 1:
       alert("黑方获胜");
       break;
     case 2:
       alert("白方获胜");
+      break;
+  }
+}
+
+// 人类下棋
+async function setPiece(row, col) {
+  if (game.side !== game.mode) {
+    alert("现在不是你的回合")
+    return;
+  }
+  if (chess.value[row][col] !== 0) {
+    alert("此处已被其他棋子占用")
+    return;
+  }
+  chess.value[row][col] = game.mode
+  const res = await axios.post("/api/set_chess", {
+    row: row,
+    col: col,
+    side: game.mode
+  })
+  const data = res.data
+  switch (data.type) {
+    case "error":
+      alert(data.content)
+      break;
+    case "new_chess":
+      game.side = 3 - game.side;
+      chess.value = data.chess
+      await nextTurn()
+      break;
+    case "end":
+      chess.value = data.chess
+      GameOver(game.mode)
       break;
   }
 }
@@ -219,7 +283,15 @@ async function nextTurn() {
         onclose() {
           if (game.started) {
             game.side = 3 - game.side
-            nextTurn()
+            switch (game.mode) {
+              case 0:
+                nextTurn()
+                break;
+              case 1:
+                break;
+              case 2:
+                break;
+            }
           } else {
             GameOver(game.side)
           }
@@ -303,10 +375,36 @@ watch(messages_white, async () => {
   box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.25);
 }
 
+.game-config {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 5%;
+  align-items: center;
+  justify-content: center;
+  gap: 10%;
+}
+
+.mode-select {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  height: 60%;
+  gap: 10px;
+}
+
+.game-mode {
+  width: auto;
+  height: 100%;
+  border-radius: 10px;
+  background-color: #FAEBD7FF;
+}
+
 .start-btn {
   border: none;
   background-color: antiquewhite;
-  height: 5%;
+  height: 100%;
   width: 20%;
   font-size: 30px;
   font-weight: bold;
@@ -353,7 +451,7 @@ watch(messages_white, async () => {
 .config-btn > button {
   flex: 1;
   margin: 5px;
-  padding:5px;
+  padding: 5px;
   font-size: 15px;
 }
 

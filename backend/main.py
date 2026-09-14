@@ -32,7 +32,7 @@ def create_agent_black(base_url, api_key, model):
         model=llm,
         system_prompt="你正在下棋,棋盘中1为黑棋，2为白棋，0为空位置",
         checkpointer=app.state.checkpoint,
-        tools=[get_chess_board, set_piece]
+        tools=[get_chess_board, set_piece_tool]
     )
     return agent
 
@@ -47,7 +47,7 @@ def create_agent_white(base_url, api_key, model):
         model=llm,
         system_prompt="你正在下棋,棋盘中1为黑棋，2为白棋，0为空位置",
         checkpointer=app.state.checkpoint,
-        tools=[get_chess_board, set_piece]
+        tools=[get_chess_board, set_piece_tool]
     )
     return agent
 
@@ -62,6 +62,12 @@ class LLMConfig(BaseModel):
     base_url: str
     api_key: str
     model: str
+
+
+class HumanChess(BaseModel):
+    side: int
+    row: int
+    col: int
 
 
 def check_chess(chess_board, latest_row, latest_col):
@@ -118,7 +124,7 @@ def get_chess_board():
 
 
 @tool
-def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
+def set_piece_tool(row: int, col: int, runtime: ToolRuntime[LLMContext]):
     """
     下棋
     Args:
@@ -127,10 +133,14 @@ def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
     return:
         下完当前棋后的棋盘
     """
+    return set_piece(row, col, runtime.context.side)
+
+
+def set_piece(row: int, col: int, side: int):
     # 得到当前执棋方
     global turn
     # 判断当前回合是否为执棋方回合
-    if turn != runtime.context.side:
+    if turn != side:
         return {
             "type": "error",
             "content": "你已经下过棋了,现在不是你的回合,请结束请求"
@@ -138,7 +148,7 @@ def set_piece(row: int, col: int, runtime: ToolRuntime[LLMContext]):
     # 要下的位置要为空
     if chess[row][col] == 0:
         # 下棋
-        chess[row][col] = runtime.context.side
+        chess[row][col] = side
         # 转换回合
         turn = 3 - turn
         # 检查对局是否结束
@@ -200,7 +210,6 @@ async def generate(chat_id, side):
                     # 返回AI回复内容
                     yield f"event:content\ndata: {chunk.content}\n\n"
                 # 若上面这个if判断chunk中没有内容就是模型在思考，返回思考内容
-                print(chunk)
                 reasoning_content = chunk.additional_kwargs.get("reasoning_content", "")
                 # 返回思考内容
                 if reasoning_content:
@@ -274,6 +283,12 @@ def create_white(req: LLMConfig):
         "type": "success",
         "content": "黑棋初始化完成"
     }
+
+
+@app.post("/api/set_chess")
+def set_chess(req: HumanChess):
+    """人类方下棋"""
+    return set_piece(req.row, req.col, req.side)
 
 
 if __name__ == '__main__':
