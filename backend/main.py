@@ -281,7 +281,7 @@ def create_white(req: LLMConfig):
     app.state.agent_white = agent
     return {
         "type": "success",
-        "content": "黑棋初始化完成"
+        "content": "白棋初始化完成"
     }
 
 

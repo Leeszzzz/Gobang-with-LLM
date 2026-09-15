@@ -6,9 +6,12 @@
         <div class="config"><p>base url</p><input v-model="blackConfig.base_url"></div>
         <div class="config"><p>api key</p><input v-model="blackConfig.api_key"></div>
         <div class="config"><p>model</p><input v-model="blackConfig.model"></div>
-        <div class="config-btn">
+        <div v-if="game.blackConfigBtn" class="config-btn">
           <button @click="showBlackConfig = false">取消</button>
           <button @click="initBlack">确定</button>
+        </div>
+        <div v-else-if="!game.blackConfigBtn" style="text-align: center;font-size: 18px">
+          模型加载中...（加载完自动关闭此页）
         </div>
       </div>
       <button v-if="!showBlackConfig"
@@ -32,6 +35,9 @@
     </div>
     <!-- 中间棋盘 -->
     <div class="chess-body">
+      <div class="top-message">
+        {{ game.message }}
+      </div>
       <div class="chess-board">
         <div
             v-for="(cell, k) in chess.flat(1)"
@@ -42,7 +48,7 @@
           <div v-if="cell === 2" class="white-piece"/>
         </div>
       </div>
-      <div class="game-config" v-if="!game.started">
+      <div class="game-config" v-if="!game.started && game.BlackInitialed && game.WhiteInitialed">
         <div class="mode-select">
           <p>选择模式</p>
           <select class="game-mode" v-model="game.mode">
@@ -51,8 +57,17 @@
             <option :value="2">执白棋（后手）</option>
           </select>
         </div>
-
         <button class="start-btn" @click="startGame">开始</button>
+      </div>
+      <div v-else-if="!game.started && !game.configed">
+        请先配置模型
+      </div>
+      <div v-else-if="!game.started && game.configed && !game.BlackInitialed && !game.WhiteInitialed" class="game-config"
+           style="font-size: 20px;font-weight: bolder">
+        正在加载模型...
+      </div>
+      <div v-else-if="game.started" class="game-config" style="font-size: 20px;font-weight: bolder">
+        当前为{{ game.side === 1 ? "黑棋回合" : "白棋回合" }}
       </div>
     </div>
     <!-- 右边（白棋）AI界面 -->
@@ -61,9 +76,12 @@
         <div class="config"><p>base url</p><input v-model="whiteConfig.base_url"></div>
         <div class="config"><p>api key</p><input v-model="whiteConfig.api_key"></div>
         <div class="config"><p>model</p><input v-model="whiteConfig.model"></div>
-        <div class="config-btn">
+        <div v-if="game.whiteConfigBtn" class="config-btn">
           <button @click="showWhiteConfig = false">取消</button>
           <button @click="initWhite">确定</button>
+        </div>
+        <div v-else-if="!game.whiteConfigBtn" style="text-align: center;font-size: 18px">
+          模型加载中...（加载完自动关闭此页）
         </div>
       </div>
       <button v-if="!showWhiteConfig"
@@ -94,10 +112,16 @@ import {fetchEventSource} from "@microsoft/fetch-event-source";
 import axios from "axios";
 // 全局游戏状态
 const game = reactive({
+  configed: false,
+  BlackInitialed: false,
+  WhiteInitialed: false,
+  blackConfigBtn: true,
+  whiteConfigBtn: true,
   started: false,
   chat_id: 1,
   side: 1,
-  mode: 0 // 0 双方人机，1 我方黑棋，2 我方白棋
+  mode: 0, // 0 双方人机，1 我方黑棋，2 我方白棋
+  message: ""
 });
 // 黑白棋设置可见
 const showBlackConfig = ref(false)
@@ -128,12 +152,18 @@ onMounted(async () => {
   // 本地获取保存的设置信息
   blackConfig.value = JSON.parse(localStorage.getItem("blackConfig"));
   whiteConfig.value = JSON.parse(localStorage.getItem("whiteConfig"));
+  if (blackConfig.value && whiteConfig.value) {
+    game.configed = true;
+    game.blackConfigBtn = false
+    game.whiteConfigBtn = false
+  }
   if (!blackConfig.value) {
     blackConfig.value = {
       base_url: null,
       api_key: null,
       model: null
     }
+    game.blackConfigBtn = true
   } else {
     await initBlack()
   }
@@ -143,6 +173,7 @@ onMounted(async () => {
       api_key: null,
       model: null
     }
+    game.whiteConfigBtn = true
   } else {
     await initWhite()
   }
@@ -150,27 +181,33 @@ onMounted(async () => {
 
 // 发请求 创建黑棋agent
 async function initBlack() {
+  game.blackConfigBtn = false;
   const res = await axios.post("/api/create_black", {
     base_url: blackConfig.value.base_url,
     api_key: blackConfig.value.api_key,
     model: blackConfig.value.model
   })
-  if (res.data.type === "success") {
+  if (res.data.type === "success" && JSON.stringify(blackConfig.value).length > 2) {
     localStorage.setItem("blackConfig", JSON.stringify(blackConfig.value));
     showBlackConfig.value = false
+    game.BlackInitialed = true
+    game.blackConfigBtn = true;
   }
 }
 
 //  发请求 创建白棋agent
 async function initWhite() {
+  game.whiteConfigBtn = false;
   const res = await axios.post("/api/create_white", {
     base_url: whiteConfig.value.base_url,
     api_key: whiteConfig.value.api_key,
     model: whiteConfig.value.model
   })
-  if (res.data.type === "success") {
+  if (res.data.type === "success" && JSON.stringify(whiteConfig.value).length > 2) {
     localStorage.setItem("whiteConfig", JSON.stringify(whiteConfig.value));
     showWhiteConfig.value = false
+    game.WhiteInitialed = true
+    game.whiteConfigBtn = true;
   }
 }
 
@@ -338,6 +375,10 @@ watch(messages_white, async () => {
   justify-content: center;
   gap: 10px;
   background-color: rgb(198 153 78 / 0.49);
+}
+
+.top-message {
+
 }
 
 .chess-board {
