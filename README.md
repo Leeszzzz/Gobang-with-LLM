@@ -168,7 +168,7 @@ sequenceDiagram
 - 棋盘、回合均为**进程内全局变量**，后端重启会清空对局  
 - 配置写在浏览器 `localStorage`，**不要在公共电脑上填写生产 API Key**  
 - CORS 已放开为 `*`，仅适合本地练习场景  
-- 若模型不支持 `reasoning_content`，思考区可能始终为空，属正常现象  
+- 当前走 **OpenAI Chat Completions** 接入时，一般**拿不到思考内容**（`reasoning_content` 会为空）。若要展示思考过程，需改用 **`langchain-deepseek`**，且仅限 DeepSeek 系列模型  
 - 后端依赖见 `backend/requirements.txt`，安装：`pip install -r requirements.txt`
 
 ### License
@@ -337,7 +337,7 @@ Design notes:
 - Board and turn are **global process state**; restarting the backend clears the game  
 - Configs are stored in browser `localStorage` — **do not paste production API keys on shared machines**  
 - CORS is open (`*`) for local practice only  
-- If the model does not emit `reasoning_content`, the reasoning panel may stay empty — that is expected  
+- With the current **OpenAI Chat Completions** integration, reasoning text is usually **unavailable** (`reasoning_content` stays empty). To show the thinking process, switch to **`langchain-deepseek`** with DeepSeek models only  
 - Backend dependencies are listed in `backend/requirements.txt`; install with `pip install -r requirements.txt`
 
 ### License
