@@ -43,6 +43,12 @@
             v-for="(cell, k) in chess.flat(1)"
             :key="k"
             class="chess-cell"
+            :class="{
+              'edge-left':   k % col === 0,
+              'edge-right':  k % col === col - 1,
+              'edge-top':    Math.floor(k / col) === 0,
+              'edge-bottom': Math.floor(k / col) === row - 1
+            }"
             @click="setPiece(Math.floor(k / col), k % col)">
           <div v-if="cell === 1" class="black-piece"/>
           <div v-if="cell === 2" class="white-piece"/>
@@ -62,7 +68,8 @@
       <div v-else-if="!game.started && !game.configed">
         请先配置模型
       </div>
-      <div v-else-if="!game.started && game.configed && !game.BlackInitialed && !game.WhiteInitialed" class="game-config"
+      <div v-else-if="!game.started && game.configed && !game.BlackInitialed && !game.WhiteInitialed"
+           class="game-config"
            style="font-size: 20px;font-weight: bolder">
         正在加载模型...
       </div>
@@ -387,17 +394,59 @@ watch(messages_white, async () => {
   aspect-ratio: 1/1;
   grid-template-columns: repeat(13, 1fr);
   grid-template-rows: repeat(13, 1fr);
-  border: 1px solid black;
   background-color: rgb(198 153 78);
 }
 
 .chess-cell {
+  position: relative;
   aspect-ratio: 1/1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-image: linear-gradient(to bottom, transparent calc(50% - 1px), #111111 calc(50% - 1px), #111111 calc(50% + 1px), transparent calc(50% + 1px)),
-  linear-gradient(to right, transparent calc(50% - 1px), #111111 calc(50% - 1px), #111111 calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+/* 横线、竖线统一用伪元素画 */
+.chess-cell::before,
+.chess-cell::after {
+  content: '';
+  position: absolute;
+  background: #111111;
+  pointer-events: none;
+}
+
+/* 横线：默认贯穿整格 */
+.chess-cell::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+/* 竖线：默认贯穿整格 */
+.chess-cell::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+/* —— 边缘收口：超出中线的部分不画 —— */
+/* 最左列：横线只从中点向右 */
+.chess-cell.edge-left::before { left: 50%; }
+/* 最右列：横线只从中点向左 */
+.chess-cell.edge-right::before { right: 50%; }
+/* 最上行：竖线只从中点向下 */
+.chess-cell.edge-top::after { top: 50%; }
+/* 最下行：竖线只从中点向上 */
+.chess-cell.edge-bottom::after { bottom: 50%; }
+
+/* 棋子压在线上面 */
+.black-piece,
+.white-piece {
+  position: relative;
+  z-index: 1;
 }
 
 .black-piece {
