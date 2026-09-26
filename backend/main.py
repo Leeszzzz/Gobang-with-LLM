@@ -5,10 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage
 from langchain.tools import tool
-from langchain_openai import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import ToolRuntime
 from pydantic import BaseModel
@@ -23,7 +22,7 @@ turn = 1
 
 
 def create_agent_black(base_url, api_key, model):
-    llm = ChatOpenAI(
+    llm = ChatDeepSeek(
         base_url=base_url,
         api_key=api_key,
         model=model,
@@ -38,7 +37,7 @@ def create_agent_black(base_url, api_key, model):
 
 
 def create_agent_white(base_url, api_key, model):
-    llm = ChatOpenAI(
+    llm = ChatDeepSeek(
         base_url=base_url,
         api_key=api_key,
         model=model,

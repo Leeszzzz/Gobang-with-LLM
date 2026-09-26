@@ -23,7 +23,7 @@
 
 | 特性 | 说明 |
 |------|------|
-| 双 Agent 独立配置 | 黑白双方可接入不同 OpenAI 兼容模型 |
+| 双 Agent 独立配置 | 黑白双方各自配置 DeepSeek `base_url` / `api_key` / `model` |
 | 三种对局模式 | 双方都是大模型 / 人类执黑先手 / 人类执白后手 |
 | 实时流式对话 | SSE 推送思考、回复、工具调用 |
 | 工具调用下棋 | Agent 使用 `get_chess_board`、`set_piece_tool` 完成落子 |
@@ -35,10 +35,10 @@
 
 | 层级 | 技术 |
 |------|------|
-| 后端 | Python · FastAPI · Uvicorn · LangChain · LangGraph · LangChain-OpenAI · Pydantic |
+| 后端 | Python · FastAPI · Uvicorn · LangChain · LangGraph · LangChain-DeepSeek · Pydantic |
 | 前端 | Vue 3 · Vite · Axios · `@microsoft/fetch-event-source` |
 | 协议 | REST + SSE（`text/event-stream`） |
-| 模型接入 | 任意 OpenAI 兼容的 Chat Completions 接口 |
+| 模型接入 | DeepSeek API（`ChatDeepSeek`，可输出思考内容） |
 
 ### 项目结构
 
@@ -65,7 +65,7 @@ GobangWithLLM/
 
 - Python 3.10+（建议）
 - Node.js 18+ 与 npm
-- 一个 OpenAI 兼容的模型服务（官方 API、DeepSeek、通义、本地 vLLM / Ollama 代理等均可）
+- 一个 DeepSeek API Key（[DeepSeek 开放平台](https://platform.deepseek.com/)，模型接入走 `langchain-deepseek`）
 
 #### 1. 启动后端
 
@@ -97,13 +97,13 @@ npm run dev
 2. 点击右侧 **白棋设置**，同样完成配置  
 3. 两侧都加载完成后，选择对局模式，点 **开始**
 
-示例配置（以任意 OpenAI 兼容服务为准）：
+示例配置（当前接入为 DeepSeek）：
 
 | 字段 | 示例 |
 |------|------|
-| base_url | `https://api.openai.com/v1` |
+| base_url | `https://api.deepseek.com` |
 | api_key | `sk-...` |
-| model | `gpt-4o-mini` / `deepseek-chat` / 其他兼容模型名 |
+| model | `deepseek-chat` / `deepseek-reasoner` |
 
 ### 对局模式
 
@@ -141,11 +141,11 @@ sequenceDiagram
     participant F as Vue 前端
     participant B as FastAPI 后端
     participant A as LangGraph Agent
-    participant L as LLM (OpenAI 兼容)
+    participant L as LLM (DeepSeek / ChatDeepSeek)
 
     U->>F: 配置模型 / 选择模式 / 开始
     F->>B: POST /api/create_black|white
-    B->>L: 初始化 ChatOpenAI + tools
+    B->>L: 初始化 ChatDeepSeek + tools
     F->>B: POST /api/chat (side)
     B->>A: astream(messages, tools)
     A->>L: 推理
@@ -168,7 +168,7 @@ sequenceDiagram
 - 棋盘、回合均为**进程内全局变量**，后端重启会清空对局  
 - 配置写在浏览器 `localStorage`，**不要在公共电脑上填写生产 API Key**  
 - CORS 已放开为 `*`，仅适合本地练习场景  
-- 当前走 **OpenAI Chat Completions** 接入时，一般**拿不到思考内容**（`reasoning_content` 会为空）。若要展示思考过程，需改用 **`langchain-deepseek`**，且仅限 DeepSeek 系列模型  
+- 模型接入使用 **`langchain-deepseek` 的 `ChatDeepSeek`**，仅支持 DeepSeek 系列模型；经该通道可正常输出思考内容（`reasoning_content`）。若改回普通 OpenAI Chat Completions，通常拿不到思考内容  
 - 后端依赖见 `backend/requirements.txt`，安装：`pip install -r requirements.txt`
 
 ### License
@@ -192,7 +192,7 @@ sequenceDiagram
 
 | Feature | Description |
 |---------|-------------|
-| Dual-agent config | Black and white can use different OpenAI-compatible models |
+| Dual-agent config | Black and white each configure their own DeepSeek `base_url` / `api_key` / `model` |
 | Three game modes | AI vs AI / human as black / human as white |
 | Live streaming chat | SSE delivers reasoning, replies, and tool calls |
 | Tool-based moves | Agents call `get_chess_board` and `set_piece_tool` |
@@ -204,10 +204,10 @@ sequenceDiagram
 
 | Layer | Stack |
 |-------|-------|
-| Backend | Python · FastAPI · Uvicorn · LangChain · LangGraph · LangChain-OpenAI · Pydantic |
+| Backend | Python · FastAPI · Uvicorn · LangChain · LangGraph · LangChain-DeepSeek · Pydantic |
 | Frontend | Vue 3 · Vite · Axios · `@microsoft/fetch-event-source` |
 | Protocol | REST + SSE (`text/event-stream`) |
-| Models | Any OpenAI-compatible Chat Completions endpoint |
+| Models | DeepSeek API via `ChatDeepSeek` (reasoning output supported) |
 
 ### Project Structure
 
@@ -234,7 +234,7 @@ GobangWithLLM/
 
 - Python 3.10+ (recommended)
 - Node.js 18+ and npm
-- An OpenAI-compatible model endpoint (OpenAI, DeepSeek, local vLLM / Ollama proxy, etc.)
+- A DeepSeek API key ([DeepSeek Platform](https://platform.deepseek.com/); models go through `langchain-deepseek`)
 
 #### 1. Start the backend
 
@@ -266,13 +266,13 @@ Open the URL printed by Vite (usually `http://localhost:5173`). The dev server p
 2. Click **白棋设置** (White settings) on the right and do the same  
 3. After both sides initialize, pick a mode and click **开始** (Start)
 
-Example config for any OpenAI-compatible service:
+Example config (current integration uses DeepSeek):
 
 | Field | Example |
 |-------|---------|
-| base_url | `https://api.openai.com/v1` |
+| base_url | `https://api.deepseek.com` |
 | api_key | `sk-...` |
-| model | `gpt-4o-mini` / `deepseek-chat` / other compatible model name |
+| model | `deepseek-chat` / `deepseek-reasoner` |
 
 ### Game Modes
 
@@ -296,7 +296,7 @@ Example config for any OpenAI-compatible service:
 
 | event | data | Meaning |
 |-------|------|---------|
-| `reasoning_content` | text chunk | Model reasoning (if the backend model provides it) |
+| `reasoning_content` | text chunk | Model reasoning (DeepSeek `ChatDeepSeek` output) |
 | `content` | text chunk | Model reply text |
 | `tool_calls` | tool name | Tool the agent invoked (e.g. `set_piece_tool`) |
 | `new_chess` | JSON board | Game continues; latest board |
@@ -310,11 +310,11 @@ sequenceDiagram
     participant F as Vue Frontend
     participant B as FastAPI Backend
     participant A as LangGraph Agent
-    participant L as LLM (OpenAI-compatible)
+    participant L as LLM (DeepSeek / ChatDeepSeek)
 
     U->>F: Configure models / choose mode / start
     F->>B: POST /api/create_black|white
-    B->>L: Init ChatOpenAI + tools
+    B->>L: Init ChatDeepSeek + tools
     F->>B: POST /api/chat (side)
     B->>A: astream(messages, tools)
     A->>L: Infer
@@ -337,7 +337,7 @@ Design notes:
 - Board and turn are **global process state**; restarting the backend clears the game  
 - Configs are stored in browser `localStorage` — **do not paste production API keys on shared machines**  
 - CORS is open (`*`) for local practice only  
-- With the current **OpenAI Chat Completions** integration, reasoning text is usually **unavailable** (`reasoning_content` stays empty). To show the thinking process, switch to **`langchain-deepseek`** with DeepSeek models only  
+- Model access uses **`ChatDeepSeek` from `langchain-deepseek`** and only supports DeepSeek models; reasoning content (`reasoning_content`) streams correctly through this path. Switching back to a plain OpenAI-compatible client will usually yield no reasoning  
 - Backend dependencies are listed in `backend/requirements.txt`; install with `pip install -r requirements.txt`
 
 ### License
